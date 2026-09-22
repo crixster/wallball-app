@@ -6,11 +6,11 @@
     <title>Wall Ball AI Tracker</title>
     <meta name="theme-color" content="#0f172a">
 
-    <!-- Direct PNG Icon References -->
+    <!-- PNG Icon References -->
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
 
-    <!-- Dynamic PWA Manifest linking to icon.png -->
+    <!-- PWA Manifest & Service Worker Engine -->
     <script>
         const manifest = {
             "name": "Wallball AI Tracker",
@@ -27,10 +27,10 @@
             }]
         };
         const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-        const manifestLink = document.createElement('link');
-        manifestLink.rel = 'manifest';
-        manifestLink.href = URL.createObjectURL(blob);
-        document.head.appendChild(manifestLink);
+        const link = document.createElement('link');
+        link.rel = 'manifest';
+        link.href = URL.createObjectURL(blob);
+        document.head.appendChild(link);
 
         if ('serviceWorker' in navigator) {
             const swCode = `
@@ -42,3 +42,240 @@
             navigator.serviceWorker.register(URL.createObjectURL(swBlob)).catch(() => {});
         }
     </script>
+
+    <!-- MediaPipe Pose Dependencies -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
+
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #fff; overflow: hidden; height: 100vh; }
+        #app-container { position: relative; width: 100vw; height: 100vh; background: #000; }
+        video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
+        
+        .pwa-banner { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 100; background: rgba(30, 41, 59, 0.95); padding: 14px 18px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; font-size: 18px; }
+        .install-btn { background: #22c55e; color: #fff; border: none; padding: 10px 20px; font-weight: bold; font-size: 16px; border-radius: 8px; cursor: pointer; }
+
+        .verdict-badge { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); z-index: 90; padding: 12px 28px; border-radius: 30px; font-weight: 900; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; display: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
+        .verdict-valid { background: #22c55e; color: #fff; }
+        .verdict-grey { background: #f59e0b; color: #fff; }
+        .verdict-norep { background: #ef4444; color: #fff; }
+
+        .hud-overlay { position: absolute; bottom: 20px; left: 15px; right: 15px; z-index: 90; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); padding: 20px 15px; border-radius: 20px; display: flex; justify-content: space-around; align-items: center; border: 1px solid #334155; }
+        .stat-box { text-align: center; flex: 1; }
+        .stat-val { font-size: 42px; font-weight: 900; line-height: 1; }
+        .stat-lbl { font-size: 14px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-top: 6px; }
+
+        .reset-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; padding: 14px 18px; font-size: 14px; font-weight: bold; border-radius: 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; }
+        .reset-btn:active { background: #ef4444; }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <video id="videoInput" playsinline></video>
+        <canvas id="outputCanvas"></canvas>
+
+        <div class="pwa-banner" id="pwaBanner" style="display:none;">
+            <div>📱 <strong style="font-size:18px;">Install Wallball AI</strong></div>
+            <button class="install-btn" id="pwaInstallBtn">Install App</button>
+        </div>
+
+        <div class="verdict-badge" id="verdictBadge">VALID REP</div>
+
+        <div class="hud-overlay">
+            <div class="stat-box"><div class="stat-val" style="color:#22c55e" id="validCount">0</div><div class="stat-lbl">Valid Reps</div></div>
+            <div class="stat-box"><div class="stat-val" style="color:#f59e0b" id="greyCount">0</div><div class="stat-lbl">Grey Zone</div></div>
+            <div class="stat-box"><div class="stat-val" style="color:#ef4444" id="noRepCount">0</div><div class="stat-lbl">No Rep</div></div>
+            <button class="reset-btn" id="resetBtn">Reset</button>
+        </div>
+    </div>
+
+    <script>
+        // PWA Installer Setup
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            e.preventDefault();
+            deferredPrompt = e;
+            document.getElementById('pwaBanner').style.display = 'flex';
+        });
+
+        document.getElementById('pwaInstallBtn').addEventListener('click', async () => {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                const { outcome } = await deferredPrompt.userChoice;
+                if (outcome === 'accepted') {
+                    document.getElementById('pwaBanner').style.display = 'none';
+                }
+                deferredPrompt = null;
+            }
+        });
+
+        // Audio Beep Generator
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playBeep(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'valid') {
+                osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.15);
+            } else if (type === 'norep') {
+                osc.frequency.setValueAtTime(220, audioCtx.currentTime);
+                gain.gain.setValueAtTime(0.4, audioCtx.currentTime);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+
+        // Rep Counter State
+        let validReps = 0;
+        let greyReps = 0;
+        let noReps = 0;
+
+        let repState = 'STANDING';
+        let lowestHipYRatio = 0;
+
+        // Reset Counter Button
+        document.getElementById('resetBtn').addEventListener('click', () => {
+            validReps = 0;
+            greyReps = 0;
+            noReps = 0;
+            document.getElementById('validCount').innerText = '0';
+            document.getElementById('greyCount').innerText = '0';
+            document.getElementById('noRepCount').innerText = '0';
+            repState = 'STANDING';
+        });
+
+        function processSquatDepth(landmarks) {
+            const leftHip = landmarks[23];
+            const rightHip = landmarks[24];
+            const leftKnee = landmarks[25];
+            const rightKnee = landmarks[26];
+
+            if (!leftHip || !rightHip || !leftKnee || !rightKnee) return;
+
+            const avgHipY = (leftHip.y + rightHip.y) / 2;
+            const avgKneeY = (leftKnee.y + rightKnee.y) / 2;
+
+            if (repState === 'STANDING') {
+                if (avgHipY > avgKneeY - 0.05) {
+                    repState = 'SQUATTING';
+                    lowestHipYRatio = avgHipY;
+                }
+            } else if (repState === 'SQUATTING') {
+                if (avgHipY > lowestHipYRatio) {
+                    lowestHipYRatio = avgHipY;
+                }
+
+                if (avgHipY < avgKneeY - 0.10) {
+                    evaluateRep(lowestHipYRatio, avgKneeY);
+                    repState = 'STANDING';
+                }
+            }
+        }
+
+        function evaluateRep(lowestHipY, kneeY) {
+            const depthDiff = lowestHipY - kneeY;
+            const badge = document.getElementById('verdictBadge');
+
+            badge.style.display = 'block';
+            badge.className = 'verdict-badge';
+
+            if (depthDiff > 0.02) { 
+                validReps++;
+                document.getElementById('validCount').innerText = validReps;
+                badge.innerText = "VALID REP";
+                badge.classList.add('verdict-valid');
+                playBeep('valid');
+            } else if (depthDiff >= -0.01 && depthDiff <= 0.02) {
+                greyReps++;
+                document.getElementById('greyCount').innerText = greyReps;
+                badge.innerText = "GREY ZONE";
+                badge.classList.add('verdict-grey');
+                playBeep('valid');
+            } else {
+                noReps++;
+                document.getElementById('noRepCount').innerText = noReps;
+                badge.innerText = "NO REP (TOO SHALLOW)";
+                badge.classList.add('verdict-norep');
+                playBeep('norep');
+            }
+
+            setTimeout(() => { badge.style.display = 'none'; }, 2000);
+        }
+
+        // Camera Engine
+        const videoElement = document.getElementById('videoInput');
+        const canvasElement = document.getElementById('outputCanvas');
+        const canvasCtx = canvasElement.getContext('2d');
+
+        function onResults(results) {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+            canvasCtx.save();
+            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+            canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+            if (results.poseLandmarks) {
+                const landmarks = results.poseLandmarks;
+
+                processSquatDepth(landmarks);
+
+                // 1. Draw Bounding Box
+                let minX = 1, minY = 1, maxX = 0, maxY = 0;
+                landmarks.forEach(lm => {
+                    if (lm.x < minX) minX = lm.x;
+                    if (lm.y < minY) minY = lm.y;
+                    if (lm.x > maxX) maxX = lm.x;
+                    if (lm.y > maxY) maxY = lm.y;
+                });
+
+                canvasCtx.strokeStyle = "#00f0ff";
+                canvasCtx.lineWidth = 4;
+                canvasCtx.strokeRect(
+                    minX * canvasElement.width, 
+                    minY * canvasElement.height, 
+                    (maxX - minX) * canvasElement.width, 
+                    (maxY - minY) * canvasElement.height
+                );
+
+                // 2. Squat Depth Line (Knee Reference)
+                const leftKnee = landmarks[25];
+                const rightKnee = landmarks[26];
+                if (leftKnee && rightKnee) {
+                    const avgKneeY = (leftKnee.y + rightKnee.y) / 2 * canvasElement.height;
+
+                    canvasCtx.beginPath();
+                    canvasCtx.setLineDash([10, 10]);
+                    canvasCtx.moveTo(0, avgKneeY);
+                    canvasCtx.lineTo(canvasElement.width, avgKneeY);
+                    canvasCtx.strokeStyle = "#f59e0b";
+                    canvasCtx.lineWidth = 4;
+                    canvasCtx.stroke();
+                    canvasCtx.setLineDash([]);
+
+                    canvasCtx.fillStyle = "#f59e0b";
+                    canvasCtx.font = "bold 16px sans-serif";
+                    canvasCtx.fillText("MIN SQUAT DEPTH (KNEES)", 15, avgKneeY - 10);
+                }
+            }
+            canvasCtx.restore();
+        }
+
+        const pose = new Pose({locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/pose/${file}`});
+        pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
+        pose.onResults(onResults);
+
+        const camera = new Camera(videoElement, {
+            onFrame: async () => { await pose.send({image: videoElement}); },
+            width: 1280, height: 720
+        });
+        camera.start();
+    </script>
+</body>
+</html>
