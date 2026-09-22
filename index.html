@@ -12,7 +12,6 @@
     <link rel="manifest" href="manifest.json">
 
     <script>
-        // Register Inline Service Worker for Android/iOS PWA Compliance
         if ('serviceWorker' in navigator) {
             const swCode = `
                 self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
@@ -42,13 +41,13 @@
         .verdict-grey { background: #f59e0b; color: #fff; }
         .verdict-norep { background: #ef4444; color: #fff; }
 
-        .hud-overlay { position: absolute; bottom: 20px; left: 15px; right: 15px; z-index: 90; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); padding: 20px 15px; border-radius: 20px; display: flex; justify-content: space-around; align-items: center; border: 1px solid #334155; }
+        .hud-overlay { position: absolute; bottom: 20px; left: 15px; right: 15px; z-index: 90; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); padding: 16px 12px; border-radius: 20px; display: flex; justify-content: space-around; align-items: center; border: 1px solid #334155; gap: 8px; }
         .stat-box { text-align: center; flex: 1; }
-        .stat-val { font-size: 42px; font-weight: 900; line-height: 1; }
-        .stat-lbl { font-size: 14px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-top: 6px; }
+        .stat-val { font-size: 36px; font-weight: 900; line-height: 1; }
+        .stat-lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-top: 4px; }
 
-        .reset-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; padding: 14px 18px; font-size: 14px; font-weight: bold; border-radius: 12px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; }
-        .reset-btn:active { background: #ef4444; }
+        .action-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; padding: 10px 14px; font-size: 13px; font-weight: bold; border-radius: 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; white-space: nowrap; }
+        .action-btn:active { background: #0284c7; }
     </style>
 </head>
 <body>
@@ -64,10 +63,11 @@
         <div class="verdict-badge" id="verdictBadge">VALID REP</div>
 
         <div class="hud-overlay">
-            <div class="stat-box"><div class="stat-val" style="color:#22c55e" id="validCount">0</div><div class="stat-lbl">Valid Reps</div></div>
-            <div class="stat-box"><div class="stat-val" style="color:#f59e0b" id="greyCount">0</div><div class="stat-lbl">Grey Zone</div></div>
+            <div class="stat-box"><div class="stat-val" style="color:#22c55e" id="validCount">0</div><div class="stat-lbl">Valid</div></div>
+            <div class="stat-box"><div class="stat-val" style="color:#f59e0b" id="greyCount">0</div><div class="stat-lbl">Grey</div></div>
             <div class="stat-box"><div class="stat-val" style="color:#ef4444" id="noRepCount">0</div><div class="stat-lbl">No Rep</div></div>
-            <button class="reset-btn" id="resetBtn">Reset</button>
+            <button class="action-btn" id="flipCamBtn">📷 Flip</button>
+            <button class="action-btn" id="resetBtn">🔄 Reset</button>
         </div>
     </div>
 
@@ -189,10 +189,12 @@
             setTimeout(() => { badge.style.display = 'none'; }, 2000);
         }
 
-        // Camera Engine
+        // Camera Engine with Camera Switching
         const videoElement = document.getElementById('videoInput');
         const canvasElement = document.getElementById('outputCanvas');
         const canvasCtx = canvasElement.getContext('2d');
+        let currentFacingMode = 'environment'; // Default to back camera
+        let camera = null;
 
         function onResults(results) {
             canvasElement.width = videoElement.videoWidth;
@@ -206,7 +208,7 @@
 
                 processSquatDepth(landmarks);
 
-                // Draw Bounding Box
+                // Bounding Box
                 let minX = 1, minY = 1, maxX = 0, maxY = 0;
                 landmarks.forEach(lm => {
                     if (lm.x < minX) minX = lm.x;
@@ -251,11 +253,26 @@
         pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         pose.onResults(onResults);
 
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { await pose.send({image: videoElement}); },
-            width: 1280, height: 720
+        function startCamera(facingMode) {
+            if (camera) {
+                camera.stop();
+            }
+            camera = new Camera(videoElement, {
+                onFrame: async () => { await pose.send({image: videoElement}); },
+                width: 1280, height: 720,
+                facingMode: facingMode
+            });
+            camera.start();
+        }
+
+        // Toggle Camera Button
+        document.getElementById('flipCamBtn').addEventListener('click', () => {
+            currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
+            startCamera(currentFacingMode);
         });
-        camera.start();
+
+        // Initialize Camera
+        startCamera(currentFacingMode);
     </script>
 </body>
 </html>
