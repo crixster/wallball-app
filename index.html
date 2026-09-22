@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>Wall Ball AI Tracker</title>
-    <meta name="theme-color" content="#0f172a">
+    <meta name="theme-color" content="#060a13">
 
     <!-- Icons & Static PWA Manifest -->
     <link rel="icon" type="image/png" href="icon.png">
@@ -28,25 +28,206 @@
 
     <style>
         * { box-sizing: border-box; margin: 0; padding: 0; }
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: #0f172a; color: #fff; overflow: hidden; height: 100vh; }
+
+        :root {
+            --bg-void: #060a13;
+            --panel: rgba(13, 18, 30, 0.90);
+            --panel-border: rgba(148, 163, 184, 0.16);
+            --ink: #f1f5f9;
+            --ink-dim: #93a1b8;
+
+            --valid: #34d399;
+            --valid-bg: rgba(52, 211, 153, 0.14);
+            --grey: #fbbf24;
+            --grey-bg: rgba(251, 191, 36, 0.14);
+            --norep: #f87171;
+            --norep-bg: rgba(248, 113, 113, 0.14);
+            --accent: #22d3ee;
+
+            --safe-top: env(safe-area-inset-top, 0px);
+            --safe-bottom: env(safe-area-inset-bottom, 0px);
+        }
+
+        html, body {
+            height: 100%;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: var(--bg-void);
+            color: var(--ink);
+            overflow: hidden;
+        }
+
         #app-container { position: relative; width: 100vw; height: 100vh; background: #000; }
         video, canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; }
-        
-        .pwa-banner { position: absolute; top: 10px; left: 10px; right: 10px; z-index: 100; background: rgba(30, 41, 59, 0.95); padding: 14px 18px; border-radius: 12px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #334155; font-size: 18px; }
-        .install-btn { background: #22c55e; color: #fff; border: none; padding: 10px 20px; font-weight: bold; font-size: 16px; border-radius: 8px; cursor: pointer; }
 
-        .verdict-badge { position: absolute; top: 80px; left: 50%; transform: translateX(-50%); z-index: 90; padding: 12px 28px; border-radius: 30px; font-weight: 900; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; display: none; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.4); }
-        .verdict-valid { background: #22c55e; color: #fff; }
-        .verdict-grey { background: #f59e0b; color: #fff; }
-        .verdict-norep { background: #ef4444; color: #fff; }
+        /* ---------- Install banner ---------- */
+        .pwa-banner {
+            position: absolute;
+            top: calc(12px + var(--safe-top));
+            left: 12px;
+            right: 12px;
+            z-index: 100;
+            background: var(--panel);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            padding: 14px 16px;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+        }
+        .pwa-banner-text { display: flex; flex-direction: column; line-height: 1.25; }
+        .pwa-banner-text strong { font-size: 15px; }
+        .pwa-banner-text span { font-size: 12px; color: var(--ink-dim); }
+        .install-btn {
+            background: var(--accent);
+            color: #04252b;
+            border: none;
+            padding: 10px 18px;
+            font-weight: 700;
+            font-size: 14px;
+            border-radius: 10px;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        .install-btn:active { filter: brightness(0.92); }
 
-        .hud-overlay { position: absolute; bottom: 20px; left: 15px; right: 15px; z-index: 90; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); padding: 16px 12px; border-radius: 20px; display: flex; justify-content: space-around; align-items: center; border: 1px solid #334155; gap: 8px; }
-        .stat-box { text-align: center; flex: 1; }
-        .stat-val { font-size: 36px; font-weight: 900; line-height: 1; }
-        .stat-lbl { font-size: 12px; font-weight: 700; text-transform: uppercase; color: #94a3b8; margin-top: 4px; }
+        /* ---------- Top-right controls ---------- */
+        .top-controls {
+            position: absolute;
+            top: calc(14px + var(--safe-top));
+            right: 14px;
+            z-index: 95;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .icon-btn {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: var(--panel);
+            border: 1px solid var(--panel-border);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            color: var(--ink);
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 14px rgba(0,0,0,0.35);
+            transition: transform 0.12s ease, background 0.15s ease;
+        }
+        .icon-btn:active { transform: scale(0.92); background: rgba(34, 211, 238, 0.18); }
+        .icon-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
-        .action-btn { background: #334155; color: #f8fafc; border: 1px solid #475569; padding: 10px 14px; font-size: 13px; font-weight: bold; border-radius: 10px; cursor: pointer; text-transform: uppercase; letter-spacing: 0.5px; transition: background 0.2s; white-space: nowrap; }
-        .action-btn:active { background: #0284c7; }
+        /* ---------- Verdict badge ---------- */
+        .verdict-badge {
+            position: absolute;
+            top: calc(84px + var(--safe-top));
+            left: 50%;
+            transform: translateX(-50%) scale(0.9);
+            z-index: 90;
+            padding: 14px 30px;
+            border-radius: 999px;
+            font-weight: 900;
+            font-size: clamp(18px, 5vw, 24px);
+            letter-spacing: 0.3px;
+            display: none;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.45);
+            border: 1px solid rgba(255,255,255,0.18);
+            animation: badge-pop 0.28s ease-out forwards;
+        }
+        @keyframes badge-pop {
+            0% { transform: translateX(-50%) scale(0.85); opacity: 0; }
+            60% { transform: translateX(-50%) scale(1.04); opacity: 1; }
+            100% { transform: translateX(-50%) scale(1); opacity: 1; }
+        }
+        .verdict-valid { background: var(--valid); color: #06281c; }
+        .verdict-grey  { background: var(--grey); color: #2b1d02; }
+        .verdict-norep { background: var(--norep); color: #350707; }
+
+        /* ---------- Bottom HUD ---------- */
+        .hud-overlay {
+            position: absolute;
+            bottom: calc(16px + var(--safe-bottom));
+            left: 12px;
+            right: 12px;
+            z-index: 90;
+            background: var(--panel);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-radius: 24px;
+            border: 1px solid var(--panel-border);
+            box-shadow: 0 -6px 30px rgba(0,0,0,0.4);
+            padding: 18px 18px calc(14px + var(--safe-bottom) * 0);
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .hud-total {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 2px;
+        }
+        .hud-total .total-val {
+            font-size: clamp(56px, 18vw, 88px);
+            font-weight: 900;
+            line-height: 0.95;
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+        }
+        .hud-total .total-lbl {
+            font-size: 13px;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            color: var(--ink-dim);
+            text-transform: uppercase;
+        }
+
+        .hud-breakdown {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 8px;
+        }
+        .stat-box {
+            text-align: center;
+            border-radius: 14px;
+            padding: 10px 4px 8px;
+            border: 1px solid transparent;
+        }
+        .stat-box.stat-valid { background: var(--valid-bg); border-color: rgba(52, 211, 153, 0.28); }
+        .stat-box.stat-grey  { background: var(--grey-bg);  border-color: rgba(251, 191, 36, 0.28); }
+        .stat-box.stat-norep { background: var(--norep-bg); border-color: rgba(248, 113, 113, 0.28); }
+
+        .stat-val {
+            font-size: clamp(24px, 7vw, 32px);
+            font-weight: 900;
+            line-height: 1;
+            font-variant-numeric: tabular-nums;
+        }
+        .stat-valid .stat-val { color: var(--valid); }
+        .stat-grey  .stat-val { color: var(--grey); }
+        .stat-norep .stat-val { color: var(--norep); }
+
+        .stat-lbl {
+            font-size: 11px;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            color: var(--ink-dim);
+            margin-top: 3px;
+        }
+
+        @media (max-width: 340px) {
+            .hud-total .total-val { font-size: 52px; }
+        }
     </style>
 </head>
 <body>
@@ -55,18 +236,39 @@
         <canvas id="outputCanvas"></canvas>
 
         <div class="pwa-banner" id="pwaBanner" style="display:none;">
-            <div>📱 <strong style="font-size:18px;">Install Wallball AI</strong></div>
-            <button class="install-btn" id="pwaInstallBtn">Install App</button>
+            <div class="pwa-banner-text">
+                <strong>Install Wallball AI</strong>
+                <span>Add to your home screen for quick access</span>
+            </div>
+            <button class="install-btn" id="pwaInstallBtn">Install</button>
+        </div>
+
+        <div class="top-controls">
+            <button class="icon-btn" id="flipCamBtn" aria-label="Flip camera">🔄</button>
+            <button class="icon-btn" id="resetBtn" aria-label="Reset counts">↺</button>
         </div>
 
         <div class="verdict-badge" id="verdictBadge">VALID REP</div>
 
         <div class="hud-overlay">
-            <div class="stat-box"><div class="stat-val" style="color:#22c55e" id="validCount">0</div><div class="stat-lbl">Valid</div></div>
-            <div class="stat-box"><div class="stat-val" style="color:#f59e0b" id="greyCount">0</div><div class="stat-lbl">Grey</div></div>
-            <div class="stat-box"><div class="stat-val" style="color:#ef4444" id="noRepCount">0</div><div class="stat-lbl">No Rep</div></div>
-            <button class="action-btn" id="flipCamBtn">📷 Flip</button>
-            <button class="action-btn" id="resetBtn">🔄 Reset</button>
+            <div class="hud-total">
+                <div class="total-val" id="totalCount">0</div>
+                <div class="total-lbl">Total Reps</div>
+            </div>
+            <div class="hud-breakdown">
+                <div class="stat-box stat-valid">
+                    <div class="stat-val" id="validCount">0</div>
+                    <div class="stat-lbl">Valid</div>
+                </div>
+                <div class="stat-box stat-grey">
+                    <div class="stat-val" id="greyCount">0</div>
+                    <div class="stat-lbl">Grey</div>
+                </div>
+                <div class="stat-box stat-norep">
+                    <div class="stat-val" id="noRepCount">0</div>
+                    <div class="stat-lbl">No Rep</div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -120,6 +322,10 @@
         let repState = 'STANDING';
         let lowestHipYRatio = 0;
 
+        function updateTotalDisplay() {
+            document.getElementById('totalCount').innerText = validReps + greyReps + noReps;
+        }
+
         document.getElementById('resetBtn').addEventListener('click', () => {
             validReps = 0;
             greyReps = 0;
@@ -127,6 +333,7 @@
             document.getElementById('validCount').innerText = '0';
             document.getElementById('greyCount').innerText = '0';
             document.getElementById('noRepCount').innerText = '0';
+            updateTotalDisplay();
             repState = 'STANDING';
         });
 
@@ -164,8 +371,10 @@
 
             badge.style.display = 'block';
             badge.className = 'verdict-badge';
+            // force reflow so the pop-in animation replays on rapid consecutive reps
+            void badge.offsetWidth;
 
-            if (depthDiff > 0.02) { 
+            if (depthDiff > 0.02) {
                 validReps++;
                 document.getElementById('validCount').innerText = validReps;
                 badge.innerText = "VALID REP";
@@ -185,6 +394,7 @@
                 playBeep('norep');
             }
 
+            updateTotalDisplay();
             setTimeout(() => { badge.style.display = 'none'; }, 2000);
         }
 
