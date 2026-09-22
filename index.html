@@ -24,7 +24,6 @@
     </script>
 
     <!-- MediaPipe Pose Dependencies -->
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/pose/pose.js" crossorigin="anonymous"></script>
 
     <style>
@@ -52,7 +51,7 @@
 </head>
 <body>
     <div id="app-container">
-        <video id="videoInput" playsinline></video>
+        <video id="videoInput" playsinline muted autoplay></video>
         <canvas id="outputCanvas"></canvas>
 
         <div class="pwa-banner" id="pwaBanner" style="display:none;">
@@ -189,12 +188,13 @@
             setTimeout(() => { badge.style.display = 'none'; }, 2000);
         }
 
-        // Camera Engine with Camera Switching
+        // Camera & MediaPipe Engine
         const videoElement = document.getElementById('videoInput');
         const canvasElement = document.getElementById('outputCanvas');
         const canvasCtx = canvasElement.getContext('2d');
-        let currentFacingMode = 'environment'; // Default to back camera
-        let camera = null;
+
+        let currentStream = null;
+        let currentFacingMode = 'environment'; // Default rear camera
 
         function onResults(results) {
             canvasElement.width = videoElement.videoWidth;
@@ -253,26 +253,57 @@
         pose.setOptions({ modelComplexity: 1, smoothLandmarks: true, minDetectionConfidence: 0.5, minTrackingConfidence: 0.5 });
         pose.onResults(onResults);
 
-        function startCamera(facingMode) {
-            if (camera) {
-                camera.stop();
+        // Frame Processing Loop
+        async function processFrame() {
+            if (videoElement.readyState >= 2 && !videoElement.paused) {
+                await pose.send({image: videoElement});
             }
-            camera = new Camera(videoElement, {
-                onFrame: async () => { await pose.send({image: videoElement}); },
-                width: 1280, height: 720,
-                facingMode: facingMode
-            });
-            camera.start();
+            requestAnimationFrame(processFrame);
+        }
+
+        // Native Camera Stream Switcher
+        async function initCamera(facingMode) {
+            if (currentStream) {
+                currentStream.getTracks().forEach(track => track.stop());
+            }
+
+            try {
+                const constraints = {
+                    video: {
+                        facingMode: { exact: facingMode },
+                        width: { ideal: 1280 },
+                        height: { ideal: 720 }
+                    },
+                    audio: false
+                };
+
+                // Fallback to ideal if exact facingMode is rejected
+                try {
+                    currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+                } catch (e) {
+                    currentStream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: facingMode },
+                        audio: false
+                    });
+                }
+
+                videoElement.srcObject = currentStream;
+                await videoElement.play();
+            } catch (err) {
+                console.error("Camera access error:", err);
+            }
         }
 
         // Toggle Camera Button
-        document.getElementById('flipCamBtn').addEventListener('click', () => {
+        document.getElementById('flipCamBtn').addEventListener('click', async () => {
             currentFacingMode = (currentFacingMode === 'environment') ? 'user' : 'environment';
-            startCamera(currentFacingMode);
+            await initCamera(currentFacingMode);
         });
 
-        // Initialize Camera
-        startCamera(currentFacingMode);
+        // Start Stream
+        initCamera(currentFacingMode).then(() => {
+            requestAnimationFrame(processFrame);
+        });
     </script>
 </body>
 </html>
