@@ -6,32 +6,13 @@
     <title>Wall Ball AI Tracker</title>
     <meta name="theme-color" content="#0f172a">
 
-    <!-- PNG Icon References -->
+    <!-- Icons & Static PWA Manifest -->
     <link rel="icon" type="image/png" href="icon.png">
     <link rel="apple-touch-icon" href="icon.png">
+    <link rel="manifest" href="manifest.json">
 
-    <!-- PWA Manifest & Service Worker Engine -->
     <script>
-        const manifest = {
-            "name": "Wallball AI Tracker",
-            "short_name": "WallballAI",
-            "start_url": "./",
-            "display": "standalone",
-            "background_color": "#0f172a",
-            "theme_color": "#0f172a",
-            "icons": [{
-                "src": "icon.png",
-                "sizes": "512x512",
-                "type": "image/png",
-                "purpose": "any maskable"
-            }]
-        };
-        const blob = new Blob([JSON.stringify(manifest)], {type: 'application/json'});
-        const link = document.createElement('link');
-        link.rel = 'manifest';
-        link.href = URL.createObjectURL(blob);
-        document.head.appendChild(link);
-
+        // Register Inline Service Worker for Android/iOS PWA Compliance
         if ('serviceWorker' in navigator) {
             const swCode = `
                 self.addEventListener('install', e => e.waitUntil(self.skipWaiting()));
@@ -91,7 +72,7 @@
     </div>
 
     <script>
-        // PWA Installer Setup
+        // PWA Installation Trigger
         let deferredPrompt;
         window.addEventListener('beforeinstallprompt', (e) => {
             e.preventDefault();
@@ -110,7 +91,7 @@
             }
         });
 
-        // Audio Beep Generator
+        // Audio Beep Engine
         const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         function playBeep(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
@@ -132,7 +113,7 @@
             }
         }
 
-        // Rep Counter State
+        // Rep Tracker State
         let validReps = 0;
         let greyReps = 0;
         let noReps = 0;
@@ -140,7 +121,6 @@
         let repState = 'STANDING';
         let lowestHipYRatio = 0;
 
-        // Reset Counter Button
         document.getElementById('resetBtn').addEventListener('click', () => {
             validReps = 0;
             greyReps = 0;
@@ -226,7 +206,7 @@
 
                 processSquatDepth(landmarks);
 
-                // 1. Draw Bounding Box
+                // Draw Bounding Box
                 let minX = 1, minY = 1, maxX = 0, maxY = 0;
                 landmarks.forEach(lm => {
                     if (lm.x < minX) minX = lm.x;
@@ -244,7 +224,7 @@
                     (maxY - minY) * canvasElement.height
                 );
 
-                // 2. Squat Depth Line (Knee Reference)
+                // Squat Depth Line (Knee Benchmark)
                 const leftKnee = landmarks[25];
                 const rightKnee = landmarks[26];
                 if (leftKnee && rightKnee) {
